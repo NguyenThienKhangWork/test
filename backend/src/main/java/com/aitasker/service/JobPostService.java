@@ -50,6 +50,12 @@ public class JobPostService {
                 .collect(Collectors.toList());
     }
 
+    public List<JobPostResponse> searchJobPosts(String keyword, JobStatus status, String skills) {
+        return jobPostRepository.searchJobs(keyword, status, skills).stream()
+                .map(JobPostResponse::fromEntity)
+                .collect(Collectors.toList());
+    }
+
     public JobPostResponse getJobPostById(Long id) {
         JobPost jobPost = jobPostRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("JobPost", "id", id));

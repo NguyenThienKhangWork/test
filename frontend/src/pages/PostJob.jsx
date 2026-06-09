@@ -85,7 +85,7 @@ export default function PostJob() {
             className="btn btn-outline btn-glow"
             style={{ color: 'var(--cp-cyan)', borderColor: 'var(--cp-cyan)' }}
           >
-            <span>{generating ? '🤖 ĐANG PHÂN TÍCH...' : '🤖 TRỢ LÝ AI SOẠN JD'}</span>
+            <span>{generating ? '🤖 ĐANG PHÂN TÍCH...' : '🤖 TỐI ƯU HÓA BẰNG AI'}</span>
           </button>
         </div>
 

@@ -22,6 +22,7 @@ public class ProposalResponse {
     private ProposalStatus status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private Long projectId;
 
     public static ProposalResponse fromEntity(com.aitasker.entity.Proposal proposal) {
         if (proposal == null) return null;

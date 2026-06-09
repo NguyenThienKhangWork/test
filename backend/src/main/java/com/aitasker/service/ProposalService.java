@@ -1,5 +1,6 @@
 package com.aitasker.service;
 
+import com.aitasker.dto.ProjectResponse;
 import com.aitasker.dto.ProposalRequest;
 import com.aitasker.dto.ProposalResponse;
 import com.aitasker.entity.JobPost;
@@ -26,6 +27,7 @@ public class ProposalService {
     private final ProposalRepository proposalRepository;
     private final JobPostRepository jobPostRepository;
     private final UserRepository userRepository;
+    private final ProjectService projectService;
 
     @Transactional
     public ProposalResponse submitProposal(Long jobId, String email, ProposalRequest request) {
@@ -68,27 +70,15 @@ public class ProposalService {
 
     @Transactional
     public ProposalResponse acceptProposal(Long proposalId, String clientEmail) {
+        // Delegate to project service to start the project and update proposal states
+        ProjectResponse projectResponse = projectService.createProjectFromProposal(proposalId, clientEmail);
+
         Proposal proposal = proposalRepository.findById(proposalId)
                 .orElseThrow(() -> new ResourceNotFoundException("Proposal", "id", proposalId));
 
-        JobPost jobPost = proposal.getJobPost();
-        if (!jobPost.getClient().getEmail().equals(clientEmail)) {
-            throw new BadRequestException("You are not authorized to accept proposals for this job.");
-        }
-
-        proposal.setStatus(ProposalStatus.ACCEPTED);
-        Proposal updatedProposal = proposalRepository.save(proposal);
-
-        // Optional: Reject other proposals for this job post
-        List<Proposal> otherProposals = proposalRepository.findByJobPostId(jobPost.getId());
-        for (Proposal other : otherProposals) {
-            if (!other.getId().equals(proposal.getId()) && other.getStatus() == ProposalStatus.PENDING) {
-                other.setStatus(ProposalStatus.REJECTED);
-                proposalRepository.save(other);
-            }
-        }
-
-        return ProposalResponse.fromEntity(updatedProposal);
+        ProposalResponse response = ProposalResponse.fromEntity(proposal);
+        response.setProjectId(projectResponse.getId());
+        return response;
     }
 
     @Transactional

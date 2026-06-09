@@ -2,6 +2,7 @@ package com.aitasker.controller;
 
 import com.aitasker.dto.JobPostRequest;
 import com.aitasker.dto.JobPostResponse;
+import com.aitasker.enums.JobStatus;
 import com.aitasker.service.JobPostService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +29,14 @@ public class JobPostController {
     }
 
     @GetMapping
-    public ResponseEntity<List<JobPostResponse>> getAllJobPosts() {
+    public ResponseEntity<List<JobPostResponse>> getAllJobPosts(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) JobStatus status,
+            @RequestParam(required = false) String skills) {
+        if (keyword != null || status != null || skills != null) {
+            List<JobPostResponse> response = jobPostService.searchJobPosts(keyword, status, skills);
+            return ResponseEntity.ok(response);
+        }
         List<JobPostResponse> response = jobPostService.getAllJobPosts();
         return ResponseEntity.ok(response);
     }

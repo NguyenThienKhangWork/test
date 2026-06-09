@@ -52,11 +52,11 @@ export default function JobDetail() {
 
       toast.loading('ĐANG THIẾT LẬP DỰ ÁN...');
       
-      // POST /api/projects/proposal/{proposalId}
-      const response = await API.post(`/projects/proposal/${proposalId}`);
+      // PUT /api/proposals/{proposalId}/accept
+      const response = await API.put(`/proposals/${proposalId}/accept`);
       toast.dismiss();
       toast.success('HỢP ĐỒNG KÝ KẾT THÀNH CÔNG! ĐÃ MỞ PHÒNG LÀM VIỆC.');
-      navigate(`/projects/${response.data.id}`);
+      navigate(`/projects/${response.data.projectId}`);
     } catch (err) {
       toast.dismiss();
       toast.error(err.response?.data?.message || 'Lỗi khi chấp nhận đề xuất.');
