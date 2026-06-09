@@ -1,6 +1,7 @@
 package com.aitasker.controller;
 
 import com.aitasker.dto.ProjectResponse;
+import com.aitasker.dto.StatusChangeRequest;
 import com.aitasker.service.ProjectService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -49,6 +50,28 @@ public class ProjectController {
     public ResponseEntity<ProjectResponse> completeProject(@PathVariable Long id,
                                                            @AuthenticationPrincipal UserDetails userDetails) {
         ProjectResponse response = projectService.completeProject(id, userDetails.getUsername());
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}/pause")
+    public ResponseEntity<ProjectResponse> pauseProject(@PathVariable Long id,
+                                                        @AuthenticationPrincipal UserDetails userDetails) {
+        ProjectResponse response = projectService.pauseProject(id, userDetails.getUsername());
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}/resume")
+    public ResponseEntity<ProjectResponse> resumeProject(@PathVariable Long id,
+                                                         @AuthenticationPrincipal UserDetails userDetails) {
+        ProjectResponse response = projectService.resumeProject(id, userDetails.getUsername());
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}/dispute")
+    public ResponseEntity<ProjectResponse> disputeProject(@PathVariable Long id,
+                                                          @AuthenticationPrincipal UserDetails userDetails,
+                                                          @RequestBody(required = false) StatusChangeRequest request) {
+        ProjectResponse response = projectService.disputeProject(id, userDetails.getUsername(), request);
         return ResponseEntity.ok(response);
     }
 }

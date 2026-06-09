@@ -3,5 +3,7 @@ package com.aitasker.enums;
 public enum MilestoneStatus {
     PENDING,
     SUBMITTED,
-    APPROVED
+    REVISION_REQUESTED,
+    APPROVED,
+    DISPUTED
 }

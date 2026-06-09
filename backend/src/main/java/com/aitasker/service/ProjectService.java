@@ -1,6 +1,7 @@
 package com.aitasker.service;
 
 import com.aitasker.dto.ProjectResponse;
+import com.aitasker.dto.StatusChangeRequest;
 import com.aitasker.entity.*;
 import com.aitasker.enums.JobStatus;
 import com.aitasker.enums.ProjectStatus;
@@ -25,6 +26,7 @@ public class ProjectService {
     private final JobPostRepository jobPostRepository;
     private final ServiceListingRepository serviceListingRepository;
     private final UserRepository userRepository;
+    private final DisputeRepository disputeRepository;
 
     @Transactional
     public ProjectResponse createProjectFromProposal(Long proposalId, String clientEmail) {
@@ -144,5 +146,88 @@ public class ProjectService {
 
         Project savedProject = projectRepository.save(project);
         return ProjectResponse.fromEntity(savedProject);
+    }
+
+    @Transactional
+    public ProjectResponse pauseProject(Long projectId, String clientEmail) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Project", "id", projectId));
+
+        if (!project.getClient().getEmail().equals(clientEmail)) {
+            throw new BadRequestException("Only the client can pause the project.");
+        }
+
+        if (project.getStatus() != ProjectStatus.ACTIVE) {
+            throw new BadRequestException("Only ACTIVE projects can be paused.");
+        }
+
+        project.setStatus(ProjectStatus.PAUSED);
+        return ProjectResponse.fromEntity(projectRepository.save(project));
+    }
+
+    @Transactional
+    public ProjectResponse resumeProject(Long projectId, String clientEmail) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Project", "id", projectId));
+
+        if (!project.getClient().getEmail().equals(clientEmail)) {
+            throw new BadRequestException("Only the client can resume the project.");
+        }
+
+        if (project.getStatus() != ProjectStatus.PAUSED) {
+            throw new BadRequestException("Only PAUSED projects can be resumed.");
+        }
+
+        project.setStatus(ProjectStatus.ACTIVE);
+        return ProjectResponse.fromEntity(projectRepository.save(project));
+    }
+
+    @Transactional
+    public ProjectResponse disputeProject(Long projectId, String requesterEmail, StatusChangeRequest request) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Project", "id", projectId));
+
+        ensureProjectParticipant(project, requesterEmail);
+
+        if (project.getStatus() == ProjectStatus.COMPLETED || project.getStatus() == ProjectStatus.CANCELLED) {
+            throw new BadRequestException("Completed or cancelled projects cannot be moved to dispute.");
+        }
+
+        String reason = resolveReason(request, "Project dispute requested by a participant.");
+        createDispute(project, project.getTitle(), project.getTotalAmount(), reason);
+        project.setStatus(ProjectStatus.DISPUTED);
+        return ProjectResponse.fromEntity(projectRepository.save(project));
+    }
+
+    private void ensureProjectParticipant(Project project, String email) {
+        if (!project.getClient().getEmail().equals(email) && !project.getExpert().getEmail().equals(email)) {
+            throw new BadRequestException("You are not authorized to update this project.");
+        }
+    }
+
+    private String resolveReason(StatusChangeRequest request, String fallback) {
+        if (request == null) {
+            return fallback;
+        }
+        if (request.getReason() != null && !request.getReason().isBlank()) {
+            return request.getReason();
+        }
+        if (request.getFeedback() != null && !request.getFeedback().isBlank()) {
+            return request.getFeedback();
+        }
+        return fallback;
+    }
+
+    private void createDispute(Project project, String title, Double amount, String reason) {
+        Dispute dispute = Dispute.builder()
+                .projectId(project.getId())
+                .clientName(project.getClient().getFullName())
+                .expertName(project.getExpert().getFullName())
+                .title(title)
+                .amount(amount != null ? amount : 0.0)
+                .reason(reason)
+                .status("PENDING")
+                .build();
+        disputeRepository.save(dispute);
     }
 }

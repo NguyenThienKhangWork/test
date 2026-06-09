@@ -4,6 +4,7 @@ import com.aitasker.dto.MilestoneRequest;
 import com.aitasker.dto.MilestoneResponse;
 import com.aitasker.dto.MilestoneSubmitRequest;
 import com.aitasker.dto.MilestoneApproveRequest;
+import com.aitasker.dto.StatusChangeRequest;
 import com.aitasker.service.MilestoneService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +51,22 @@ public class MilestoneController {
                                                               @AuthenticationPrincipal UserDetails userDetails,
                                                               @RequestBody MilestoneApproveRequest request) {
         MilestoneResponse response = milestoneService.approveMilestone(id, userDetails.getUsername(), request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/milestones/{id}/revision")
+    public ResponseEntity<MilestoneResponse> requestRevision(@PathVariable Long id,
+                                                             @AuthenticationPrincipal UserDetails userDetails,
+                                                             @RequestBody StatusChangeRequest request) {
+        MilestoneResponse response = milestoneService.requestRevision(id, userDetails.getUsername(), request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/milestones/{id}/dispute")
+    public ResponseEntity<MilestoneResponse> disputeMilestone(@PathVariable Long id,
+                                                              @AuthenticationPrincipal UserDetails userDetails,
+                                                              @RequestBody(required = false) StatusChangeRequest request) {
+        MilestoneResponse response = milestoneService.disputeMilestone(id, userDetails.getUsername(), request);
         return ResponseEntity.ok(response);
     }
 }

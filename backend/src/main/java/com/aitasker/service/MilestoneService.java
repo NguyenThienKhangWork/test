@@ -4,18 +4,20 @@ import com.aitasker.dto.MilestoneRequest;
 import com.aitasker.dto.MilestoneResponse;
 import com.aitasker.dto.MilestoneSubmitRequest;
 import com.aitasker.dto.MilestoneApproveRequest;
+import com.aitasker.dto.StatusChangeRequest;
+import com.aitasker.entity.Dispute;
 import com.aitasker.entity.Milestone;
 import com.aitasker.entity.Payment;
 import com.aitasker.entity.Project;
-import com.aitasker.entity.User;
 import com.aitasker.enums.MilestoneStatus;
 import com.aitasker.enums.PaymentStatus;
+import com.aitasker.enums.ProjectStatus;
 import com.aitasker.exception.BadRequestException;
 import com.aitasker.exception.ResourceNotFoundException;
+import com.aitasker.repository.DisputeRepository;
 import com.aitasker.repository.MilestoneRepository;
 import com.aitasker.repository.PaymentRepository;
 import com.aitasker.repository.ProjectRepository;
-import com.aitasker.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,7 +32,8 @@ public class MilestoneService {
     private final MilestoneRepository milestoneRepository;
     private final ProjectRepository projectRepository;
     private final PaymentRepository paymentRepository;
-    private final UserRepository userRepository;
+    private final DisputeRepository disputeRepository;
+    private final PaymentService paymentService;
 
     @Transactional
     public MilestoneResponse createMilestone(Long projectId, String clientEmail, MilestoneRequest request) {
@@ -77,8 +80,9 @@ public class MilestoneService {
             throw new BadRequestException("Only the project expert can submit milestone work.");
         }
 
-        if (milestone.getStatus() != MilestoneStatus.PENDING) {
-            throw new BadRequestException("Milestone is not in PENDING state.");
+        if (milestone.getStatus() != MilestoneStatus.PENDING
+                && milestone.getStatus() != MilestoneStatus.REVISION_REQUESTED) {
+            throw new BadRequestException("Milestone must be PENDING or REVISION_REQUESTED before submission.");
         }
 
         milestone.setDeliverables(request.getDeliverables());
@@ -105,26 +109,84 @@ public class MilestoneService {
         milestone.setStatus(MilestoneStatus.APPROVED);
         Milestone saved = milestoneRepository.save(milestone);
 
-        // Find the payment associated with this milestone and release it
-        List<Payment> payments = paymentRepository.findByProjectId(project.getId());
+        // Delegate escrow release to Dev 4 PaymentService instead of duplicating payment logic here.
+        List<Payment> payments = paymentRepository.findByMilestoneId(milestoneId);
         for (Payment payment : payments) {
-            if (payment.getMilestone() != null && payment.getMilestone().getId().equals(milestoneId)) {
-                if (payment.getStatus() == PaymentStatus.ESCROWED) {
-                    payment.setStatus(PaymentStatus.RELEASED);
-                    payment.setEscrowStatus("RELEASED");
-                    paymentRepository.save(payment);
-
-                    // Add to Expert balance
-                    User expert = project.getExpert();
-                    if (expert != null) {
-                        double currentBalance = expert.getBalance() != null ? expert.getBalance() : 0.0;
-                        expert.setBalance(currentBalance + payment.getAmount());
-                        userRepository.save(expert);
-                    }
-                }
+            if (payment.getStatus() == PaymentStatus.ESCROWED) {
+                paymentService.releaseEscrowPayment(payment.getId(), clientEmail);
             }
         }
 
         return MilestoneResponse.fromEntity(saved);
+    }
+
+    @Transactional
+    public MilestoneResponse requestRevision(Long milestoneId, String clientEmail, StatusChangeRequest request) {
+        Milestone milestone = milestoneRepository.findById(milestoneId)
+                .orElseThrow(() -> new ResourceNotFoundException("Milestone", "id", milestoneId));
+
+        Project project = milestone.getProject();
+        if (!project.getClient().getEmail().equals(clientEmail)) {
+            throw new BadRequestException("Only the project client can request milestone revisions.");
+        }
+
+        if (milestone.getStatus() != MilestoneStatus.SUBMITTED) {
+            throw new BadRequestException("Milestone must be SUBMITTED before requesting revisions.");
+        }
+
+        milestone.setFeedback(resolveReason(request, "Revision requested by client."));
+        milestone.setStatus(MilestoneStatus.REVISION_REQUESTED);
+        return MilestoneResponse.fromEntity(milestoneRepository.save(milestone));
+    }
+
+    @Transactional
+    public MilestoneResponse disputeMilestone(Long milestoneId, String requesterEmail, StatusChangeRequest request) {
+        Milestone milestone = milestoneRepository.findById(milestoneId)
+                .orElseThrow(() -> new ResourceNotFoundException("Milestone", "id", milestoneId));
+
+        Project project = milestone.getProject();
+        if (!project.getClient().getEmail().equals(requesterEmail)
+                && !project.getExpert().getEmail().equals(requesterEmail)) {
+            throw new BadRequestException("Only project participants can dispute a milestone.");
+        }
+
+        if (milestone.getStatus() == MilestoneStatus.APPROVED) {
+            throw new BadRequestException("Approved milestones cannot be disputed.");
+        }
+
+        String reason = resolveReason(request, "Milestone dispute requested by a project participant.");
+        milestone.setFeedback(reason);
+        milestone.setStatus(MilestoneStatus.DISPUTED);
+        project.setStatus(ProjectStatus.DISPUTED);
+        projectRepository.save(project);
+        createDispute(project, milestone, reason);
+
+        return MilestoneResponse.fromEntity(milestoneRepository.save(milestone));
+    }
+
+    private String resolveReason(StatusChangeRequest request, String fallback) {
+        if (request == null) {
+            return fallback;
+        }
+        if (request.getReason() != null && !request.getReason().isBlank()) {
+            return request.getReason();
+        }
+        if (request.getFeedback() != null && !request.getFeedback().isBlank()) {
+            return request.getFeedback();
+        }
+        return fallback;
+    }
+
+    private void createDispute(Project project, Milestone milestone, String reason) {
+        Dispute dispute = Dispute.builder()
+                .projectId(project.getId())
+                .clientName(project.getClient().getFullName())
+                .expertName(project.getExpert().getFullName())
+                .title("Milestone #" + milestone.getId() + ": " + milestone.getTitle())
+                .amount(milestone.getAmount() != null ? milestone.getAmount() : 0.0)
+                .reason(reason)
+                .status("PENDING")
+                .build();
+        disputeRepository.save(dispute);
     }
 }

@@ -210,6 +210,36 @@ export default function ProjectDetail() {
     }
   };
 
+  const handleRequestRevision = async (milestoneId) => {
+    try {
+      const response = await API.put(`/milestones/${milestoneId}/revision`, {
+        feedback: feedbackText || 'Client requested revisions.'
+      });
+      toast.success('Yeu cau chinh sua da duoc gui.');
+      setMilestones((prev) => prev.map(m => m.id === milestoneId ? response.data : m));
+      setApprovingMilestoneId(null);
+      setFeedbackText('');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Loi khi yeu cau chinh sua.');
+    }
+  };
+
+  const handleDisputeMilestone = async (milestoneId) => {
+    const reason = window.prompt('Nhap ly do tranh chap cot moc nay:');
+    if (reason === null) return;
+
+    try {
+      const response = await API.put(`/milestones/${milestoneId}/dispute`, {
+        reason: reason || 'Milestone dispute requested.'
+      });
+      toast.success('Da chuyen cot moc sang trang thai tranh chap.');
+      setMilestones((prev) => prev.map(m => m.id === milestoneId ? response.data : m));
+      setProject((prev) => prev ? { ...prev, status: 'DISPUTED' } : prev);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Loi khi tao tranh chap cot moc.');
+    }
+  };
+
   const handleCloseProject = async () => {
     try {
       const confirmComplete = window.confirm('Hoàn thành toàn bộ dự án và chấm dứt hợp đồng?');
@@ -220,6 +250,41 @@ export default function ProjectDetail() {
       setProject(response.data);
     } catch (err) {
       toast.error('Lỗi khi kết thúc dự án.');
+    }
+  };
+
+  const handlePauseProject = async () => {
+    try {
+      const response = await API.put(`/projects/${id}/pause`);
+      toast.success('Du an da tam dung.');
+      setProject(response.data);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Loi khi tam dung du an.');
+    }
+  };
+
+  const handleResumeProject = async () => {
+    try {
+      const response = await API.put(`/projects/${id}/resume`);
+      toast.success('Du an da tiep tuc.');
+      setProject(response.data);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Loi khi tiep tuc du an.');
+    }
+  };
+
+  const handleDisputeProject = async () => {
+    const reason = window.prompt('Nhap ly do tranh chap du an:');
+    if (reason === null) return;
+
+    try {
+      const response = await API.put(`/projects/${id}/dispute`, {
+        reason: reason || 'Project dispute requested.'
+      });
+      toast.success('Da chuyen du an sang trang thai tranh chap.');
+      setProject(response.data);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Loi khi tao tranh chap du an.');
     }
   };
 
@@ -276,8 +341,23 @@ export default function ProjectDetail() {
           </div>
           <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
             {isClient && project.status === 'ACTIVE' && (
-              <button onClick={handleCloseProject} className="btn btn-primary btn-glow">
-                <span>HOÀN THÀNH DỰ ÁN</span>
+              <>
+                <button onClick={handlePauseProject} className="btn btn-outline">
+                  <span>TAM DUNG</span>
+                </button>
+                <button onClick={handleCloseProject} className="btn btn-primary btn-glow">
+                  <span>HOÀN THÀNH DỰ ÁN</span>
+                </button>
+              </>
+            )}
+            {isClient && project.status === 'PAUSED' && (
+              <button onClick={handleResumeProject} className="btn btn-primary btn-glow">
+                <span>TIEP TUC</span>
+              </button>
+            )}
+            {project.status !== 'COMPLETED' && project.status !== 'DISPUTED' && (
+              <button onClick={handleDisputeProject} className="btn btn-outline" style={{ borderColor: '#ff006e', color: '#ff006e' }}>
+                <span>TRANH CHAP</span>
               </button>
             )}
             <Link to={isClient ? '/client' : '/expert'} className="btn btn-outline">
@@ -338,7 +418,7 @@ export default function ProjectDetail() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(255,255,255,0.04)', paddingTop: '12px', flexWrap: 'wrap', gap: '8px', marginTop: '15px' }}>
                           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
                             <span style={{ color: 'var(--cp-text-muted)' }}>CỘT MỐC: </span>
-                            <span style={{ color: m.status === 'APPROVED' ? '#39ff14' : m.status === 'SUBMITTED' ? '#ffcf00' : 'var(--cp-cyan)' }}>
+                            <span style={{ color: m.status === 'APPROVED' ? '#39ff14' : m.status === 'DISPUTED' ? '#ff006e' : m.status === 'REVISION_REQUESTED' ? 'var(--cp-magenta)' : m.status === 'SUBMITTED' ? '#ffcf00' : 'var(--cp-cyan)' }}>
                               {m.status}
                             </span>
                             {associatedPayment && (
@@ -357,7 +437,7 @@ export default function ProjectDetail() {
                                 KÝ QUỸ
                               </button>
                             )}
-                            {!isClient && m.status === 'PENDING' && associatedPayment?.status === 'ESCROWED' && (
+                            {!isClient && (m.status === 'PENDING' || m.status === 'REVISION_REQUESTED') && associatedPayment?.status === 'ESCROWED' && (
                               <div style={{ width: '100%' }}>
                                 {submittingMilestoneId === m.id ? (
                                   <div style={{ marginTop: '10px', background: 'rgba(255,255,255,0.02)', padding: '12px', border: '1px dashed var(--cp-cyan)', width: '100%', boxSizing: 'border-box' }}>
